@@ -1,3 +1,5 @@
+use std::iter::Peekable;
+
 use crate::expr::*;
 use logos::Logos;
 
@@ -30,7 +32,7 @@ pub fn parse(input: &str) -> Option<Expr> {
   parse_sum(&mut lex)
 }
 
-fn parse_atom<'a>(lex: &mut impl Iterator<Item = Tok<'a>>) -> Option<Expr> {
+fn parse_atom<'a>(lex: &mut Peekable<impl Iterator<Item = Tok<'a>>>) -> Option<Expr> {
   match lex.next() {
     Some(Tok::Ident(i)) => {
       Some(Expr::Ident(i.into()))
@@ -42,24 +44,36 @@ fn parse_atom<'a>(lex: &mut impl Iterator<Item = Tok<'a>>) -> Option<Expr> {
   }
 }
 
-fn parse_term<'a>(lex: &mut impl Iterator<Item = Tok<'a>>) -> Option<Expr>  {
+fn parse_term<'a>(lex: &mut Peekable<impl Iterator<Item = Tok<'a>>>) -> Option<Expr>  {
   let first = parse_atom(lex)?;
-  let op = match lex.next()? {
-    Tok::Plus => BinOp::Add,
-    Tok::Minus => BinOp::Sub,
-    _ => return None,
+  let op = match lex.peek() {
+    Some(Tok::Star) => {
+      lex.next()?; // eat op
+      BinOp::Mul
+    },
+    Some(Tok::Slash) => {
+      lex.next()?; // eat op
+      BinOp::Div
+    },
+    _ => return Some(first),
   };
-  let second = parse_atom(lex)?;
+  let second = parse_term(lex)?;
   Some(Expr::Bin(Box::new(first), op, Box::new(second)))
 }
 
-fn parse_sum<'a>(lex: &mut impl Iterator<Item = Tok<'a>>) -> Option<Expr> {
+fn parse_sum<'a>(lex: &mut Peekable<impl Iterator<Item = Tok<'a>>>) -> Option<Expr> {
   let first = parse_term(lex)?;
-  let op = match lex.next()? {
-    Tok::Plus => BinOp::Add,
-    Tok::Minus => BinOp::Sub,
-    _ => return None,
+  let op = match lex.peek() {
+    Some(Tok::Plus) => {
+      lex.next()?; // eat op
+      BinOp::Add
+    },
+    Some(Tok::Minus) => {
+      lex.next()?; // eat op
+      BinOp::Sub
+    },
+    _ => return Some(first),
   };
-  let second = parse_term(lex)?;
+  let second = parse_sum(lex)?;
   Some(Expr::Bin(Box::new(first), op, Box::new(second)))
 }
