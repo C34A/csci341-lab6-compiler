@@ -4,7 +4,7 @@
 pub enum Stmt {
   ExprStmt(Expr),
   Decl(String, i64),
-  Assignment(String, i32),
+  Assignment(String, Expr),
 }
 
 #[derive(Debug)]

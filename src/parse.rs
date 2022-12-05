@@ -26,8 +26,12 @@ pub enum Tok<'a> {
   #[token(";")]
   Semicolon,
 
-  #[token("int")]
-  Int,
+  #[token("let")]
+  Let,
+
+  // this lets us not need lookahead which and is a bit of a hack but makes life easier
+  #[token("set")]
+  Set,
 
   #[regex(r"[ \t\n\r\f]+", logos::skip)]
   #[error]
@@ -62,7 +66,7 @@ pub fn parse(input: &str) -> Option<Vec<Stmt>> {
 }
 
 fn parse_decl<'a>(lex: &mut Peekable<impl Iterator<Item = Tok<'a>>>) -> Option<Stmt> {
-  match_tok(lex, Tok::Int)?;
+  match_tok(lex, Tok::Let)?;
   let name = if let Some(Tok::Ident(name)) = match_tok(lex, Tok::Ident("" as _)) {
     name.into()
   } else {
@@ -75,7 +79,7 @@ fn parse_decl<'a>(lex: &mut Peekable<impl Iterator<Item = Tok<'a>>>) -> Option<S
     if let Some(Tok::Lit(val)) = match_tok(lex, Tok::Lit(0)) {
       val
     } else {
-      eprintln!("ERR: value expected in declaration");
+      eprintln!("ERR: value expected in declaration (note: expressions are not supported here)");
       synchronize(lex);
       return None;
     }
@@ -96,7 +100,8 @@ fn match_tok<'a>(lex: &mut Peekable<impl Iterator<Item = Tok<'a>>>, expected: To
       // this is stupid but fine for now
       (Tok::Equals, Tok::Equals) => Some(lex.next()?),
       (Tok::Ident(_), Tok::Ident(_)) => Some(lex.next()?),
-      (Tok::Int, Tok::Int) => Some(lex.next()?),
+      (Tok::Let, Tok::Let) => Some(lex.next()?),
+      (Tok::Set, Tok::Set) => Some(lex.next()?),
       (Tok::Lit(_), Tok::Lit(_)) => Some(lex.next()?),
       (Tok::Minus, Tok::Minus) => Some(lex.next()?),
       (Tok::Plus, Tok::Plus) => Some(lex.next()?),
@@ -119,26 +124,32 @@ fn synchronize<'a>(lex: &mut Peekable<impl Iterator<Item = Tok<'a>>>) {
 }
 
 fn parse_assign<'a>(lex: &mut Peekable<impl Iterator<Item = Tok<'a>>>) -> Option<Stmt> {
+  match_tok(lex, Tok::Set)?;
+
   let name = if let Some(Tok::Ident(name)) = match_tok(lex, Tok::Ident("" as _)) {
     name.into()
   } else {
+    eprintln!("ERR: expected identifier after 'set'.");
+    synchronize(lex);
     return None;
   };
 
-  let val = if let Some(_) = match_tok(lex, Tok::Equals) {
-    if let Some(Tok::Lit(val)) = match_tok(lex, Tok::Lit(0)) {
-      val
-    } else {
-      eprintln!("ERR: value expected in assignment");
-      synchronize(lex);
-      return None;
-    }
+  if let None = match_tok(lex, Tok::Equals) {
+    eprintln!("ERR: expected '=' after set identifier.");
+    synchronize(lex);
+    return None;
+  }
+
+  let val = if let Some(e) = parse_sum(lex) {
+    e
   } else {
+    eprintln!("ERR: expression expected in assignment");
+    synchronize(lex);
     return None;
   };
 
   if let Some(_) = match_tok(lex, Tok::Semicolon) {
-    Some(Stmt::Decl(name, val))
+    Some(Stmt::Assignment(name, val))
   } else {
     eprintln!("ERR: semicolon expected after assignment");
     synchronize(lex);
@@ -147,7 +158,14 @@ fn parse_assign<'a>(lex: &mut Peekable<impl Iterator<Item = Tok<'a>>>) -> Option
 }
 
 fn parse_expr_stmt<'a>(lex: &mut Peekable<impl Iterator<Item = Tok<'a>>>) -> Option<Stmt> {
-  Some(Stmt::ExprStmt(parse_sum(lex)?))
+  let e = Stmt::ExprStmt(parse_sum(lex)?);
+  if let Some(_) = match_tok(lex, Tok::Semicolon) {
+    Some(e)
+  } else {
+    eprintln!("ERR: syntax error.");
+    synchronize(lex);
+    None
+  }
 }
 
 fn parse_atom<'a>(lex: &mut Peekable<impl Iterator<Item = Tok<'a>>>) -> Option<Expr> {
