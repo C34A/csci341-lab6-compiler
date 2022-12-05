@@ -1,3 +1,5 @@
+use crate::expr::Expr;
+
 
 
 #[derive(Copy, Clone, Debug)]
@@ -70,13 +72,103 @@ pub const T4: Reg = Reg(29);
 pub const T5: Reg = Reg(30);
 pub const T6: Reg = Reg(31);
 
+impl std::fmt::Display for Reg {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    if self.0 > 31 { Err(std::fmt::Error) } else {
+      write!(f, "x{}", self.0)
+    }
+  }
+}
+
+// yeah this is just a bool but more explicit
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RState {
+  Used,
+  Free,
+}
+
+type RegMap = [RState; 32];
 
 pub struct RVBuilder {
-  pub instrs: Vec<String>
+  pub instrs: Vec<String>,
+  regs: RegMap,
 }
 
 impl RVBuilder {
   pub fn push(&mut self, s: String) {
     self.instrs.push(s)
+  }
+
+  pub fn dump(&self) {
+    for l in &self.instrs {
+      println!("    {}", l)
+    }
+  }
+
+  pub fn new() -> Self {
+    Self { instrs: vec![], regs: [RState::Free; 32] }
+  }
+
+  fn get_reg(&mut self) -> Option<Reg> {
+    const REG_ORDER: &[Reg] = &[T0, T1, T2, T3, T4, T5, T6];
+    for reg in REG_ORDER {
+      if self.regs[reg.0 as usize] == RState::Free {
+        self.regs[reg.0 as usize] = RState::Used;
+        return Some(*reg);
+      }
+    }
+    None
+  }
+
+  /**
+   * I bet this could be managed using the borrow checker somehow.
+   * I'm not going to waste time on that for now.
+   */
+  fn free_reg(&mut self, r: Reg) {
+    self.regs[r.0 as usize] = RState::Free;
+  }
+
+  pub fn compile_expr(&mut self, e: &Expr) -> Option<Reg> {
+    match e {
+      Expr::Lit(val) => {
+        let reg = self.get_reg().expect("failed to allocate reg for immediate");
+        if *val > u32::MAX as _ || *val < i32::MIN as _ {
+          eprintln!("WARN: immediate {} is out of 32 bit range", val);
+        }
+        self.push(format!("li {}, {}", reg, val));
+        Some(reg)
+      },
+      Expr::Bin(left, op, right) =>{
+        use crate::expr::BinOp::*;
+
+        let left = self.compile_expr(&left);
+        let right = self.compile_expr(&right);
+        let left = left?;
+        let right = right?;
+        match op {
+          Add => {
+            self.push(format!("add {}, {}, {}", left, left, right));
+            self.free_reg(right);
+            Some(left)
+          },
+          Sub => {
+            self.push(format!("sub {}, {}, {}", left, left, right));
+            self.free_reg(right);
+            Some(left)
+          },
+          Mul => {
+            self.push(format!("mul {}, {}, {}", left, left, right));
+            self.free_reg(right);
+            Some(left)
+          },
+          Div => {
+            self.push(format!("div {}, {}, {}", left, left, right));
+            self.free_reg(right);
+            Some(left)
+          },
+        }
+      }
+      Expr::Ident(_name) => unimplemented!(),
+    }
   }
 }

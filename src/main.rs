@@ -7,7 +7,9 @@ fn main() {
 
   let text = std::fs::read_to_string(path).expect(&format!("file {} not found.", path));
 
-  let parse = compiler::parse::parse(&text);
+  let ast = compiler::parse::parse(&text).expect("parse failed");
 
-  println!("{:#?}", parse)
+  let mut builder = compiler::riscv::RVBuilder::new();
+  builder.compile_expr(&ast).expect("compile failed");
+  builder.dump();
 }
