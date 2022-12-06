@@ -44,8 +44,44 @@ pub enum Tok<'a> {
   Error,
 }
 
+struct Lex<'a> {
+  tokens: Vec<Tok<'a>>
+}
+
+impl<'a> Lex<'a> {
+  fn new(input: &'a str) -> Self {
+    let l = Tok::lexer(input);
+    let mut v = Vec::from_iter(l.into_iter());
+    v.reverse();
+    Self {
+      tokens: v
+    }
+  }
+
+  fn pop(&mut self) -> Option<Tok<'a>> {
+    match self.tokens.pop() {
+      Some(Tok::Error) => {
+        eprintln!("ERR: unrecognized token");
+        self.pop()
+      },
+      other => other,
+    }
+  }
+
+  fn peek(&self) -> Option<&Tok<'a>> {
+    match self.tokens.last() {
+      Some(Tok::Error) => {
+        eprintln!("ERR: unrecognized token");
+        self.pop();
+        self.peek()
+      },
+      other => other,
+    }
+  }
+}
+
 pub fn parse(input: &str) -> Option<Vec<Stmt>> {
-  let mut lex = Tok::lexer(input).peekable();
+  let mut lex = Lex::new(input);
 
   let mut ret = vec![];
 
