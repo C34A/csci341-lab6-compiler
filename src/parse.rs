@@ -29,10 +29,16 @@ pub enum Tok<'a> {
   #[token("let")]
   Let,
 
+  #[token("(")]
+  LParen,
+  #[token(")")]
+  RParen,
+
   // this lets us not need lookahead which and is a bit of a hack but makes life easier
   #[token("set")]
   Set,
 
+  #[regex(r"//.*[\n\r]", logos::skip)]
   #[regex(r"[ \t\n\r\f]+", logos::skip)]
   #[error]
   Error,

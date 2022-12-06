@@ -7,6 +7,8 @@ use crate::expr::{Expr, Stmt};
 #[derive(Copy, Clone, Debug)]
 pub struct Reg (u8);
 
+// is this really necessary? idk, but i wrote it before anything else and it
+// might pay off eventually.
 pub const X0: Reg = Reg(0);
 pub const X1: Reg = Reg(1);
 pub const X2: Reg = Reg(2);
