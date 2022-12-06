@@ -26,7 +26,7 @@ pub fn typecheck(e: &Expr, errs: &mut Vec<String>) -> Option<TExpr> {
         exp: TExprKind::Lit(*val),
       })
     },
-    Expr::Ident(name) => unimplemented!(),
+    Expr::Ident(_name) => unimplemented!(),
     Expr::Bin(left, op, right) => {
       let left = typecheck(left, errs);
       let right = typecheck(right, errs);
@@ -44,6 +44,7 @@ pub fn typecheck(e: &Expr, errs: &mut Vec<String>) -> Option<TExpr> {
         exp: TExprKind::Bin(Box::new(left), *op, Box::new(right))
       })
     }
+    Expr::Call(_, _) => todo!(),
   }
   
 }

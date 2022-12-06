@@ -274,6 +274,23 @@ impl Compiler {
         self.push(format!("lw {}, {}", r, label));
         Some(r)
       },
+      Expr::Call(name, params) => {
+        let mut all_ok = true;
+        for (i, param_expr) in params.iter().enumerate() {
+          if let Some(r) = self.compile_expr(param_expr) {
+            self.push(format!("mov a{}, {}", i, r));
+            self.regs.free_reg(r);
+          } else {
+            all_ok = false;
+          }
+        }
+
+        if all_ok { // if the args are invalid, dont compile the call i guess.
+          self.push(format!("call {}", name));
+        }
+
+        Some(A0)
+      },
     }
   }
 }

@@ -12,6 +12,7 @@ pub enum Expr {
   Lit(i64),
   Ident(String),
   Bin(Box<Expr>, BinOp, Box<Expr>),
+  Call(String, Vec<Expr>)
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
