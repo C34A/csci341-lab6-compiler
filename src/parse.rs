@@ -176,8 +176,7 @@ fn parse_atom<'a>(lex: &mut Peekable<impl Iterator<Item = Tok<'a>>>) -> Option<E
     Some(Tok::Lit(l)) => {
       Some(Expr::Lit(l))
     },
-    a => {
-      println!("{:?}", a);
+    _ => {
       None
     },
   }

@@ -9,9 +9,9 @@ fn main() {
 
   let ast = compiler::parse::parse(&text).expect("parse failed");
 
-  // let mut builder = compiler::riscv::RVBuilder::new();
-  // builder.compile_expr(&ast).expect("compile failed");
-  // builder.dump();
+  let mut builder = compiler::riscv::Compiler::new();
+  builder.compile(ast);
+  builder.dump();
 
-  println!("{:?}", ast);
+  // println!("{:?}", ast);
 }

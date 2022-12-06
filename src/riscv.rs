@@ -1,4 +1,6 @@
-use crate::expr::Expr;
+use std::{collections::HashMap};
+
+use crate::expr::{Expr, Stmt};
 
 
 
@@ -87,33 +89,16 @@ pub enum RState {
   Free,
 }
 
-type RegMap = [RState; 32];
-
-pub struct RVBuilder {
-  pub instrs: Vec<String>,
-  regs: RegMap,
+struct RegMap {
+  pub map: [RState; 32]
 }
 
-impl RVBuilder {
-  pub fn push(&mut self, s: String) {
-    self.instrs.push(s)
-  }
-
-  pub fn dump(&self) {
-    for l in &self.instrs {
-      println!("    {}", l)
-    }
-  }
-
-  pub fn new() -> Self {
-    Self { instrs: vec![], regs: [RState::Free; 32] }
-  }
-
+impl RegMap {
   fn get_reg(&mut self) -> Option<Reg> {
     const REG_ORDER: &[Reg] = &[T0, T1, T2, T3, T4, T5, T6];
     for reg in REG_ORDER {
-      if self.regs[reg.0 as usize] == RState::Free {
-        self.regs[reg.0 as usize] = RState::Used;
+      if self.map[reg.0 as usize] == RState::Free {
+        self.map[reg.0 as usize] = RState::Used;
         return Some(*reg);
       }
     }
@@ -125,13 +110,114 @@ impl RVBuilder {
    * I'm not going to waste time on that for now.
    */
   fn free_reg(&mut self, r: Reg) {
-    self.regs[r.0 as usize] = RState::Free;
+    self.map[r.0 as usize] = RState::Free;
+  }
+}
+
+struct SymTab {
+  pub data: HashMap<String, (String, i64)>,
+}
+
+impl SymTab {
+  fn decl(&mut self, name: String, initial: i64) -> Option<()> {
+    if self.data.contains_key(&name) {
+      eprintln!("ERR: Redeclaration of variable {}", name);
+      return None;
+    }
+    let lbl = format!("var_{}", &name);
+    self.data.insert(name, (lbl, initial));
+    Some(())
+  }
+
+  fn get_var(&self, name: &str) -> Option<&str> {
+    self.data.get(name).map(|tup| &tup.0 as _)
+  }
+
+  fn dump_data_asm(&self) {
+    println!(".data");
+    for (label, initial) in self.data.values() {
+      println!("{}:", label);
+      println!("    .word {}", initial);
+    }
+    println!("");
+  }
+}
+
+pub struct Compiler {
+  stab: SymTab,
+  pub instrs: Vec<String>,
+  regs: RegMap,
+}
+
+impl Compiler {
+  pub fn push(&mut self, s: String) {
+    self.instrs.push(s)
+  }
+
+  pub fn dump(&self) {
+    self.stab.dump_data_asm();
+    println!(".text");
+    for l in &self.instrs {
+      println!("    {}", l)
+    }
+  }
+
+  pub fn new() -> Self {
+    Self { stab: SymTab {data: HashMap::new()}, instrs: vec![], regs: RegMap{map: [RState::Free; 32]} }
+  }
+
+  pub fn compile(&mut self, stmts: Vec<Stmt>) {
+    stmts.iter().for_each(|stmt| self.compile_stmt(stmt));
+  }
+
+  pub fn compile_stmt(&mut self, s: &Stmt) {
+    match s {
+        Stmt::ExprStmt(e) => {
+          if let Some(result_reg) = self.compile_expr(e) {
+            // result is discarded in an expression statement
+            self.regs.free_reg(result_reg);
+          } else {
+            // compile_expr should report an error so nothing is needed here.
+            // FIXME: this probably leaks registers...
+          }
+        },
+        Stmt::Decl(name, init_val) => {
+          self.stab.decl(name.clone() /* PERF: avoid clone */, *init_val);
+        },
+        Stmt::Assignment(name, value) => {
+          
+          let result = if let Some(result_reg) = self.compile_expr(value) {
+            result_reg
+          } else {
+            return;
+          };
+          let var_label = match self.stab.get_var(name) {
+            Some(l) => l.to_string(), // helps with ownership trouble
+            None => {
+              eprintln!("variable not found: {}", name);
+              return;
+            },
+          };
+
+          let addr_reg = match self.regs.get_reg() {
+            Some(r) => r,
+            None => {
+              eprintln!("unable to allocate register to hold address for {} in assignment", name);
+              return;
+            }
+          };
+
+          self.push(format!("sw {}, {}, {}", result, var_label, addr_reg));
+          self.regs.free_reg(result);
+          self.regs.free_reg(addr_reg);
+        },
+    }
   }
 
   pub fn compile_expr(&mut self, e: &Expr) -> Option<Reg> {
     match e {
       Expr::Lit(val) => {
-        let reg = self.get_reg().expect("failed to allocate reg for immediate");
+        let reg = self.regs.get_reg().expect("failed to allocate reg for immediate");
         if *val > u32::MAX as _ || *val < i32::MIN as _ {
           eprintln!("WARN: immediate {} is out of 32 bit range", val);
         }
@@ -148,27 +234,44 @@ impl RVBuilder {
         match op {
           Add => {
             self.push(format!("add {}, {}, {}", left, left, right));
-            self.free_reg(right);
+            self.regs.free_reg(right);
             Some(left)
           },
           Sub => {
             self.push(format!("sub {}, {}, {}", left, left, right));
-            self.free_reg(right);
+            self.regs.free_reg(right);
             Some(left)
           },
           Mul => {
             self.push(format!("mul {}, {}, {}", left, left, right));
-            self.free_reg(right);
+            self.regs.free_reg(right);
             Some(left)
           },
           Div => {
             self.push(format!("div {}, {}, {}", left, left, right));
-            self.free_reg(right);
+            self.regs.free_reg(right);
             Some(left)
           },
         }
       }
-      Expr::Ident(_name) => unimplemented!(),
+      Expr::Ident(name) => {
+        let label = match self.stab.get_var(name) {
+          Some(l) => l.to_string(), // helps with ownership trouble
+          None => {
+            eprintln!("variable not found: {}", name);
+            return None;
+          }
+        };
+        let r = match self.regs.get_reg() {
+          Some(r) => r,
+          None => {
+            eprintln!("ERR: unable to allocate register for variable {}", name);
+            return None;
+          }
+        };
+        self.push(format!("lw {}, {}", r, label));
+        Some(r)
+      },
     }
   }
 }
