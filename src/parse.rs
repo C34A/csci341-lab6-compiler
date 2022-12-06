@@ -84,9 +84,9 @@ impl<'a> Lex<'a> {
 pub fn parse(input: &str) -> Option<Vec<Stmt>> {
   let mut lex = Lex::new(input);
 
-  for t in lex.tokens.iter().rev() {
-    println!("{:?}", t);
-  }
+  // for t in lex.tokens.iter().rev() {
+  //   println!("{:?}", t);
+  // }
 
   let mut ret = vec![];
 
@@ -156,6 +156,9 @@ fn match_tok<'a>(lex: &mut Lex<'a>, expected: Tok) -> Option<Tok<'a>> {
       (Tok::Semicolon, Tok::Semicolon) => Some(lex.pop()?),
       (Tok::Slash, Tok::Slash) => Some(lex.pop()?),
       (Tok::Star, Tok::Star) => Some(lex.pop()?),
+      (Tok::LParen, Tok::LParen) => Some(lex.pop()?),
+      (Tok::RParen, Tok::RParen) => Some(lex.pop()?),
+      (Tok::Comma, Tok::Comma) => Some(lex.pop()?),
       _ => None,
     }
   } else {
@@ -235,33 +238,35 @@ fn parse_call<'a>(lex: &mut Lex) -> Option<Expr> {
   match (first, lex.peek()) {
     (Expr::Ident(s), Some(Tok::LParen)) => { // valid call
       lex.pop(); // eat (
-        if let Some(Tok::RParen) = lex.peek() { // no params
-          return Some(Expr::Call(s, vec![]));
-        } else if let Some(e) = parse_sum(lex) { // one or more params
-          let mut params = vec![e];
-          loop {
-            // if matches!(lex.peek(), Some(Tok::RParen)) {
-            //   break;
-            // }
-            match lex.peek() {
-              Some(Tok::RParen) => break,
-              Some(Tok::Comma) => (),
-              _ => {
-                eprintln!("ERR: expected comma between call parameters");
-                return None;
-              }
-            }
-            match parse_sum(lex) {
-              Some(e) => params.push(e),
-              None => return None, // should this report an error?
+      if let Some(Tok::RParen) = lex.peek() { // no params
+        return Some(Expr::Call(s, vec![]));
+      } else if let Some(e) = parse_sum(lex) { // one or more params
+        let mut params = vec![e];
+        loop {
+          // if matches!(lex.peek(), Some(Tok::RParen)) {
+          //   break;
+          // }
+          println!("{:?}", lex.peek());
+          match lex.peek() {
+            Some(Tok::RParen) => break,
+            Some(Tok::Comma) => (),
+            _ => {
+              eprintln!("ERR: expected comma between call parameters");
+              return None;
             }
           }
-          lex.pop(); // eat )
-          return Some(Expr::Call(s, params));
-        } else { // invalid
-          eprintln!("ERR: expected ')' or expression in function call");
-          return None;
+          lex.pop(); // eat comma
+          match parse_sum(lex) {
+            Some(e) => params.push(e),
+            None => return None, // should this report an error?
+          }
         }
+        lex.pop(); // eat )
+        return Some(Expr::Call(s, params));
+      } else { // invalid
+        eprintln!("ERR: expected ')' or expression in function call");
+        return None;
+      }
     },
     (atom, _) => Some(atom) // something else
   }

@@ -76,6 +76,8 @@ pub const T4: Reg = Reg(29);
 pub const T5: Reg = Reg(30);
 pub const T6: Reg = Reg(31);
 
+const STDLIB: &'static str = include_str!("../resources/stdlib.s");
+
 impl std::fmt::Display for Reg {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     if self.0 > 31 { Err(std::fmt::Error) } else {
@@ -159,6 +161,9 @@ impl Compiler {
   pub fn dump(&self) {
     self.stab.dump_data_asm();
     println!(".text");
+    println!("    j __start");
+    println!("{}", STDLIB);
+    println!("__start:");
     for l in &self.instrs {
       println!("    {}", l)
     }
@@ -278,7 +283,7 @@ impl Compiler {
         let mut all_ok = true;
         for (i, param_expr) in params.iter().enumerate() {
           if let Some(r) = self.compile_expr(param_expr) {
-            self.push(format!("mov a{}, {}", i, r));
+            self.push(format!("mv a{}, {}", i, r));
             self.regs.free_reg(r);
           } else {
             all_ok = false;
@@ -287,6 +292,8 @@ impl Compiler {
 
         if all_ok { // if the args are invalid, dont compile the call i guess.
           self.push(format!("call {}", name));
+        } else {
+          eprintln!("ERR: failed to compile call to {}", name);
         }
 
         Some(A0)
