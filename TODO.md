@@ -2,7 +2,7 @@
 - ~~control flow~~ DONE
 - ~~boolean not and remainder~~ DONE
 - save registers when calling functions
-- implement more syscall functions
+- ~~implement more syscall functions~~ DONE
   - only use whats needed from stdlib?
     - this would be easier to do with a full function implementation...
 - clean up

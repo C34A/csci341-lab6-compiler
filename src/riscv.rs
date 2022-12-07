@@ -306,6 +306,27 @@ impl Compiler {
             // if there is no else block, all that needs to be done is to complete the jump by emitting a label.
             b.push(format!("{}:", false_label));
           }
+        },
+        Stmt::While(cond, body) => {
+          let top_lbl = self.label_counter.next();
+          b.push(format!("{}:", top_lbl));
+          let cond_result = self.compile_expr(b, cond);
+          
+          // use these later
+          let end_label = self.label_counter.next();
+          // if the condition failed to compile, always assume false so that the rest of the
+          // if can still be compiled.
+          b.push(format!("beqz {}, {}", cond_result.unwrap_or(ZERO), end_label));
+          
+          cond_result.map(|r| self.regs.free_reg(r)); // the condition isnt used in the body, so free it now.
+          
+          let mut body_iblock = vec![];
+          self.compile_block(&mut body_iblock, body);
+          
+          b.append(&mut body_iblock);
+          b.push(format!("j {}", top_lbl));
+
+          b.push(format!("{}:", end_label));
         }
     }
   }

@@ -5,7 +5,7 @@ use logos::{Logos, Lexer};
 
 #[derive(Debug, Logos, PartialEq)]
 pub enum Tok<'a> {
-  #[regex("[0-9]+", |lex| lex.slice().parse())]
+  #[regex("(-?)[0-9]+", |lex| lex.slice().parse())]
   Lit(i64),
 
   #[regex(r"[a-zA-Z_][a-zA-Z_\-0-9]*", |lex| lex.slice())]
@@ -70,6 +70,8 @@ pub enum Tok<'a> {
   If,
   #[token("else")]
   Else,
+  #[token("while")]
+  While,
 
   #[token(",")]
   Comma,
@@ -116,7 +118,7 @@ impl<'a> Lex<'a> {
         other => other,
       }
     ;
-    println!("{:?}", ret);
+    // println!("{:?}", ret);
     ret
   }
 
@@ -132,7 +134,7 @@ impl<'a> Lex<'a> {
   }
 
   fn push(&mut self, t: Tok<'a>) {
-    println!(">{:?}", t);
+    // println!(">{:?}", t);
     self.tokens.push(t)
   }
 }
@@ -162,6 +164,9 @@ fn parse_block<'a>(lex: &mut Lex) -> Option<Block> {
       ret.push(s);
       continue;
     } else if let Some(s) = parse_if_stmt(lex) {
+      ret.push(s);
+      continue;
+    } else if let Some(s) = parse_while(lex) {
       ret.push(s);
       continue;
     } else {
@@ -204,6 +209,23 @@ fn parse_if_stmt<'a>(lex: &mut Lex) -> Option<Stmt> {
   } else {
     None
   }
+}
+
+fn parse_while<'a>(lex: &mut Lex) -> Option<Stmt> {
+  match lex.peek() {
+    Some(Tok::While) => {lex.pop(); ()},
+    _ => {
+      return None
+    },
+  }
+  let condition = parse_expr(lex);
+
+  expect(lex, Tok::LBracket, "ERR: expected { after while")?;
+
+  let true_block = parse_block(lex);
+  expect(lex, Tok::RBracket, "ERR: expected } after while body")?;
+
+  Some(Stmt::While(condition?, true_block?))
 }
 
 fn parse_decl<'a>(lex: &mut Lex) -> Option<Stmt> {
@@ -275,6 +297,7 @@ fn match_tok<'a>(lex: &mut Lex<'a>, expected: Tok) -> Option<Tok<'a>> {
       (Tok::RBracket, Tok::RBracket) => Some(lex.pop()?),
       (Tok::If, Tok::If) => Some(lex.pop()?),
       (Tok::Else, Tok::Else) => Some(lex.pop()?),
+      (Tok::While, Tok::While) => Some(lex.pop()?),
       (Tok::Comma, Tok::Comma) => Some(lex.pop()?),
       (Tok::String(_), Tok::String(_)) => Some(lex.pop()?),
       (Tok::Set, Tok::Set) => Some(lex.pop()?),

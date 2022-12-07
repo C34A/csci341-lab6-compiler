@@ -7,6 +7,7 @@ pub enum Stmt {
   Decl(String, DeclInit),
   Assignment(String, Expr),
   If(Expr, Block, Option<Block>),
+  While(Expr, Block),
 }
 
 

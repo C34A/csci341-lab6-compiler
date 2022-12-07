@@ -1,0 +1,6 @@
+let a = 10;
+while a {
+  print_dec(a);
+  print_str("\n");
+  set a = a - 1;
+}
