@@ -46,6 +46,7 @@ pub fn typecheck(e: &Expr, errs: &mut Vec<String>) -> Option<TExpr> {
     }
     Expr::Call(_, _) => unimplemented!(),
     Expr::String(_) => unimplemented!(),
+    Expr::Unary(_, _) => unimplemented!(),
   }
   
 }

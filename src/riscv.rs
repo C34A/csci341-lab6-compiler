@@ -1,6 +1,6 @@
 use std::{collections::HashMap};
 
-use crate::expr::{Expr, Stmt};
+use crate::expr::{Expr, Stmt, UnaryOp};
 
 
 
@@ -129,7 +129,7 @@ impl SymTab {
       eprintln!("ERR: Redeclaration of variable {}", name);
       return None;
     }
-    let lbl = format!("var_{}", &name);
+    let lbl = format!("__var_{}", &name);
     self.data.insert(name, (lbl, initial));
     Some(())
   }
@@ -163,9 +163,6 @@ pub struct Compiler {
 }
 
 impl Compiler {
-  pub fn push(&mut self, s: String) {
-    self.instrs.push(s)
-  }
 
   pub fn dump(&self) {
     self.stab.dump_data_asm();
@@ -232,7 +229,7 @@ impl Compiler {
             }
           };
 
-          self.push(format!("sw {}, {}, {}", result, var_label, addr_reg));
+          self.instrs.push(format!("sw {}, {}, {}", result, var_label, addr_reg));
           self.regs.free_reg(result);
           self.regs.free_reg(addr_reg);
         },
@@ -246,7 +243,7 @@ impl Compiler {
         if *val > u32::MAX as _ || *val < i32::MIN as _ {
           eprintln!("WARN: immediate {} is out of 32 bit range", val);
         }
-        self.push(format!("li {}, {}", reg, val));
+        self.instrs.push(format!("li {}, {}", reg, val));
         Some(reg)
       },
       Expr::Bin(left, op, right) =>{
@@ -258,22 +255,22 @@ impl Compiler {
         let right = right?;
         match op {
           Add => {
-            self.push(format!("add {}, {}, {}", left, left, right));
+            self.instrs.push(format!("add {}, {}, {}", left, left, right));
             self.regs.free_reg(right);
             Some(left)
           },
           Sub => {
-            self.push(format!("sub {}, {}, {}", left, left, right));
+            self.instrs.push(format!("sub {}, {}, {}", left, left, right));
             self.regs.free_reg(right);
             Some(left)
           },
           Mul => {
-            self.push(format!("mul {}, {}, {}", left, left, right));
+            self.instrs.push(format!("mul {}, {}, {}", left, left, right));
             self.regs.free_reg(right);
             Some(left)
           },
           Div => {
-            self.push(format!("div {}, {}, {}", left, left, right));
+            self.instrs.push(format!("div {}, {}, {}", left, left, right));
             self.regs.free_reg(right);
             Some(left)
           },
@@ -294,14 +291,14 @@ impl Compiler {
             return None;
           }
         };
-        self.push(format!("lw {}, {}", r, label));
+        self.instrs.push(format!("lw {}, {}", r, label));
         Some(r)
       },
       Expr::Call(name, params) => {
         let mut all_ok = true;
         for (i, param_expr) in params.iter().enumerate() {
           if let Some(r) = self.compile_expr(param_expr) {
-            self.push(format!("mv a{}, {}", i, r));
+            self.instrs.push(format!("mv a{}, {}", i, r));
             self.regs.free_reg(r);
           } else {
             all_ok = false;
@@ -309,7 +306,7 @@ impl Compiler {
         }
 
         if all_ok { // if the args are invalid, dont compile the call i guess.
-          self.push(format!("call {}", name));
+          self.instrs.push(format!("call {}", name));
         } else {
           eprintln!("ERR: failed to compile call to {}", name);
         }
@@ -321,6 +318,53 @@ impl Compiler {
         let reg = self.regs.get_reg().expect("failed to get register for string");
         self.instrs.push(format!("la {}, {}", reg, lbl));
         Some(reg)
+      },
+      Expr::Unary(operator, operand) => {
+        match operator {
+          UnaryOp::Deref => {
+            let operand_result = self.compile_expr(operand)?;
+            self.instrs.push(format!("lw {}, ({})", operand_result, operand_result));
+            Some(operand_result)
+          },
+          UnaryOp::Addr => {
+            match operand.as_ref() {
+              Expr::Lit(_) => {
+                eprintln!("ERR: cannot take address of an immediate (put it in a variable)");
+                None
+              },
+              Expr::String(_) => {
+                eprintln!("ERR: cannot take address of string as strings are already addresses");
+                None
+              },
+              Expr::Ident(name) => {
+                let reg = self.regs.get_reg().expect("failed to get register for addressof temporary");
+                let label = match self.stab.get_var(&name) {
+                  Some(l) => l,
+                  None => {
+                    eprintln!("ERR: variable not found: {}", name);
+                    return None;
+                  },
+                };
+                self.instrs.push(format!("la {}, {}", reg, label));
+                Some(reg)
+              },
+              _ => {
+                eprintln!("ERR: cannot take address of a temporary value");
+                None
+              }
+            }
+          },
+          UnaryOp::Neg => {
+            let operand_result = self.compile_expr(operand)?;
+            self.instrs.push(format!("sub {}, x0, {}", operand_result, operand_result));
+            Some(operand_result)
+          },
+          UnaryOp::Not => {
+            let operand_result = self.compile_expr(operand)?;
+            self.instrs.push(format!("xori {}, {}, -1", operand_result, operand_result));
+            Some(operand_result)
+          },
+        }
       },
     }
   }

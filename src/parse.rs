@@ -19,6 +19,10 @@ pub enum Tok<'a> {
   Star,
   #[token("/")]
   Slash,
+  #[token("&")]
+  Amp,
+  #[token("~")]
+  Tilde,
 
   #[token("=")]
   Equals,
@@ -161,7 +165,7 @@ fn parse_decl<'a>(lex: &mut Lex) -> Option<Stmt> {
 fn match_tok<'a>(lex: &mut Lex<'a>, expected: Tok) -> Option<Tok<'a>> {
   if let Some(t) = lex.peek() {
     match (t, expected) {
-      // this is stupid but fine for now
+      // this is stupid but fine for now (ie works)
       (Tok::Equals, Tok::Equals) => Some(lex.pop()?),
       (Tok::Ident(_), Tok::Ident(_)) => Some(lex.pop()?),
       (Tok::Let, Tok::Let) => Some(lex.pop()?),
@@ -175,6 +179,7 @@ fn match_tok<'a>(lex: &mut Lex<'a>, expected: Tok) -> Option<Tok<'a>> {
       (Tok::LParen, Tok::LParen) => Some(lex.pop()?),
       (Tok::RParen, Tok::RParen) => Some(lex.pop()?),
       (Tok::Comma, Tok::Comma) => Some(lex.pop()?),
+      (Tok::Amp, Tok::Amp) => Some(lex.pop()?),
       _ => None,
     }
   } else {
@@ -218,7 +223,7 @@ fn parse_assign<'a>(lex: &mut Lex) -> Option<Stmt> {
   if let Some(_) = match_tok(lex, Tok::Semicolon) {
     Some(Stmt::Assignment(name, val))
   } else {
-    eprintln!("ERR: semicolon expected after assignment");
+    eprintln!("ERR: semicolon expected after assignment, got {:?}", lex.peek());
     synchronize(lex);
     None
   }
@@ -258,6 +263,7 @@ fn parse_call<'a>(lex: &mut Lex) -> Option<Expr> {
     (Expr::Ident(s), Some(Tok::LParen)) => { // valid call
       lex.pop(); // eat (
       if let Some(Tok::RParen) = lex.peek() { // no params
+        lex.pop(); // eat )
         return Some(Expr::Call(s, vec![]));
       } else if let Some(e) = parse_sum(lex) { // one or more params
         let mut params = vec![e];
@@ -290,8 +296,22 @@ fn parse_call<'a>(lex: &mut Lex) -> Option<Expr> {
   }
 }
 
+fn parse_unary<'a>(lex: &mut Lex) -> Option<Expr> {
+  let operator = match lex.peek() {
+    Some(Tok::Amp) => UnaryOp::Addr,
+    Some(Tok::Star) => UnaryOp::Deref,
+    Some(Tok::Minus) => UnaryOp::Neg,
+    Some(Tok::Tilde) => UnaryOp::Not,
+    _ => return parse_call(lex)
+  };
+  lex.pop(); // eat operator
+
+  let operand = parse_unary(lex)?;
+  Some(Expr::Unary(operator, Box::new(operand)))
+}
+
 fn parse_term<'a>(lex: &mut Lex) -> Option<Expr>  {
-  let first = parse_call(lex)?;
+  let first = parse_unary(lex)?;
   let op = match lex.peek() {
     Some(Tok::Star) => {
       lex.pop()?; // eat op

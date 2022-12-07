@@ -1,0 +1,15 @@
+let answer;
+print_str("Enter a number: ");
+set answer = read_int();
+print_str("negative: ");
+print_dec(-answer);
+print_str("\n");
+print_str("not: ");
+print_dec(~answer);
+print_str("\n");
+print_str("addr: ");
+print_dec(&answer);
+print_str("\n");
+print_str("deref addr: ");
+print_dec(*&answer);
+print_str("\n");

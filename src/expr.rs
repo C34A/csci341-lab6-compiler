@@ -20,7 +20,8 @@ pub enum Expr {
   String(String),
   Ident(String),
   Bin(Box<Expr>, BinOp, Box<Expr>),
-  Call(String, Vec<Expr>)
+  Call(String, Vec<Expr>),
+  Unary(UnaryOp, Box<Expr>),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -29,4 +30,12 @@ pub enum BinOp {
   Sub,
   Mul,
   Div,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum UnaryOp {
+  Deref,
+  Addr,
+  Neg,
+  Not,
 }

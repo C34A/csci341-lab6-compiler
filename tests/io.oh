@@ -1,0 +1,6 @@
+let answer;
+print_str("Enter a number: ");
+set answer = read_int();
+print_str("the next number is: ");
+print_dec(answer + 1);
+print_str("\n");
