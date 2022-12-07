@@ -1,0 +1,12 @@
+- logical operators
+- control flow
+- save registers when calling functions
+- implement more syscall functions
+  - only use whats needed from stdlib?
+    - this would be easier to do with a full function implementation...
+- clean up
+- clean up
+- clean up
+- write README/docs
+- turn in prolly
+- optimization?
