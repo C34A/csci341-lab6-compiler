@@ -119,8 +119,8 @@ impl RegMap {
 }
 
 struct SymTab {
-  pub data: HashMap<String, (String, String)>, // (label, initial value)
-  pub strings: Vec<(String, String)>, // (label, contents)
+  pub data: HashMap<String, (String, String)>, // name -> (label, initial value)
+  pub strings: HashMap<String, String>, // label -> contents
 }
 
 impl SymTab {
@@ -139,20 +139,27 @@ impl SymTab {
   }
 
   fn add_string(&mut self, s: String) -> String {
-    self.strings.push((format!("__str_{}", self.strings.len()), s));
-    self.strings.last().unwrap().0.clone() /* PERF: avoid clone */
+    /* PERF: avoid cloning!! slow!! */
+    if !self.strings.contains_key(&s) {
+      self.strings.insert(s.clone(), format!("__str_{}", self.strings.len()));
+    }
+    self.strings.get(&s).unwrap().clone() 
   }
 
   fn dump_data_asm(&self) {
     println!(".data");
-    for (label, initial) in &self.strings {
-      println!(r#"{}: .asciz "{}" "#, label, initial);
+    for (contents, label) in &self.strings {
+      println!(r#"{}: .asciz "{}" "#, label, contents);
     }
     for (label, initial) in self.data.values() {
       println!("{}:", label);
       println!("    .word {}", initial);
     }
     println!("");
+  }
+
+  fn new() -> Self {
+    Self {data: HashMap::new(), strings: HashMap::new()}
   }
 }
 
@@ -177,7 +184,7 @@ impl Compiler {
 
   pub fn new() -> Self {
     Self {
-      stab: SymTab {data: HashMap::new(), strings: vec![]},
+      stab: SymTab::new(),
       instrs: vec![],
       regs: RegMap{map: [RState::Free; 32]}
     }
