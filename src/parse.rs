@@ -29,6 +29,27 @@ pub enum Tok<'a> {
   #[token(";")]
   Semicolon,
 
+  #[token("==")]
+  EqEq,
+  #[token("<")]
+  Less,
+  #[token("<_")]
+  LessUnsigned,
+  #[token(">")]
+  Greater,
+
+  #[token("|")]
+  Or,
+  #[token("^")]
+  Xor,
+
+  #[token(">>_")]
+  RShift,
+  #[token(">>")]
+  ARShift,
+  #[token("<<")]
+  LShift,
+
   #[token("let")]
   Let,
 
@@ -212,7 +233,7 @@ fn parse_assign<'a>(lex: &mut Lex) -> Option<Stmt> {
     return None;
   }
 
-  let val = if let Some(e) = parse_sum(lex) {
+  let val = if let Some(e) = parse_expr(lex) {
     e
   } else {
     eprintln!("ERR: expression expected in assignment");
@@ -230,7 +251,7 @@ fn parse_assign<'a>(lex: &mut Lex) -> Option<Stmt> {
 }
 
 fn parse_expr_stmt<'a>(lex: &mut Lex) -> Option<Stmt> {
-  let e = Stmt::ExprStmt(parse_sum(lex)?);
+  let e = Stmt::ExprStmt(parse_expr(lex)?);
   if let Some(_) = match_tok(lex, Tok::Semicolon) {
     Some(e)
   } else {
@@ -251,6 +272,19 @@ fn parse_atom<'a>(lex: &mut Lex) -> Option<Expr> {
     Some(Tok::String(s)) => {
       Some(Expr::String(s.into()))
     },
+    Some(Tok::LParen) => {
+      let ret = parse_expr(lex);
+      match lex.peek() {
+        Some(Tok::RParen) => {
+          lex.pop(); // eat )
+          ret
+        },
+        _ => {
+          eprintln!("ERR: expected )");
+          None
+        }
+      }
+    }
     _ => {
       None
     },
@@ -265,7 +299,7 @@ fn parse_call<'a>(lex: &mut Lex) -> Option<Expr> {
       if let Some(Tok::RParen) = lex.peek() { // no params
         lex.pop(); // eat )
         return Some(Expr::Call(s, vec![]));
-      } else if let Some(e) = parse_sum(lex) { // one or more params
+      } else if let Some(e) = parse_expr(lex) { // one or more params
         let mut params = vec![e];
         loop {
           // if matches!(lex.peek(), Some(Tok::RParen)) {
@@ -280,7 +314,7 @@ fn parse_call<'a>(lex: &mut Lex) -> Option<Expr> {
             }
           }
           lex.pop(); // eat comma
-          match parse_sum(lex) {
+          match parse_expr(lex) {
             Some(e) => params.push(e),
             None => return None, // should this report an error?
           }
@@ -342,4 +376,102 @@ fn parse_sum<'a>(lex: &mut Lex) -> Option<Expr> {
   };
   let second = parse_sum(lex)?;
   Some(Expr::Bin(Box::new(first), op, Box::new(second)))
+}
+
+fn parse_shift<'a>(lex: &mut Lex) -> Option<Expr> {
+  let first = parse_sum(lex)?;
+  let op = match lex.peek() {
+    Some(Tok::RShift) => {
+      lex.pop()?; // eat op
+      BinOp::Srl
+    },
+    Some(Tok::ARShift) => {
+      lex.pop()?; // eat op
+      BinOp::Sra
+    },
+    Some(Tok::LShift) => {
+      lex.pop()?; // eat op
+      BinOp::Sll
+    },
+    _ => return Some(first),
+  };
+  let second = parse_shift(lex)?;
+  Some(Expr::Bin(Box::new(first), op, Box::new(second)))
+}
+
+fn parse_less<'a>(lex: &mut Lex) -> Option<Expr> {
+  let first = parse_shift(lex)?;
+  let op = match lex.peek() {
+    Some(Tok::Less) => {
+      lex.pop()?; // eat op
+      BinOp::Less
+    },
+    Some(Tok::LessUnsigned) => {
+      lex.pop()?; // eat op
+      BinOp::LessUnsigned
+    },
+    Some(Tok::Greater) => {
+      lex.pop()?; // eat op
+      BinOp::Greater
+    },
+    _ => return Some(first),
+  };
+  let second = parse_less(lex)?;
+  Some(Expr::Bin(Box::new(first), op, Box::new(second)))
+}
+
+fn parse_equality<'a>(lex: &mut Lex) -> Option<Expr> {
+  let first = parse_less(lex)?;
+  let op = match lex.peek() {
+    Some(Tok::EqEq) => {
+      lex.pop()?; // eat op
+      BinOp::TestEq
+    },
+    _ => return Some(first),
+  };
+  let second = parse_equality(lex)?;
+  Some(Expr::Bin(Box::new(first), op, Box::new(second)))
+}
+
+fn parse_and<'a>(lex: &mut Lex) -> Option<Expr> {
+  let first = parse_equality(lex)?;
+  let op = match lex.peek() {
+    Some(Tok::Amp) => {
+      lex.pop()?; // eat op
+      BinOp::And
+    },
+    _ => return Some(first),
+  };
+  let second = parse_and(lex)?;
+  Some(Expr::Bin(Box::new(first), op, Box::new(second)))
+}
+
+fn parse_xor<'a>(lex: &mut Lex) -> Option<Expr> {
+  let first = parse_and(lex)?;
+  let op = match lex.peek() {
+    Some(Tok::Xor) => {
+      lex.pop()?; // eat op
+      BinOp::Xor
+    },
+    _ => return Some(first),
+  };
+  let second = parse_xor(lex)?;
+  Some(Expr::Bin(Box::new(first), op, Box::new(second)))
+}
+
+fn parse_or<'a>(lex: &mut Lex) -> Option<Expr> {
+  let first = parse_xor(lex)?;
+  let op = match lex.peek() {
+    Some(Tok::Or) => {
+      lex.pop()?; // eat op
+      BinOp::Or
+    },
+    _ => return Some(first),
+  };
+  let second = parse_or(lex)?;
+  Some(Expr::Bin(Box::new(first), op, Box::new(second)))
+}
+
+fn parse_expr<'a>(lex: &mut Lex) -> Option<Expr> {
+  parse_or(lex)
 }

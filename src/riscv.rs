@@ -256,28 +256,69 @@ impl Compiler {
       Expr::Bin(left, op, right) =>{
         use crate::expr::BinOp::*;
 
+        let right = self.compile_expr(&right); // compiling right first helps with register management
         let left = self.compile_expr(&left);
-        let right = self.compile_expr(&right);
         let left = left?;
         let right = right?;
+
+        fn simple(this: &mut Compiler, mnemonic: &'static str, left: Reg, right: Reg) -> Option<Reg> {
+          this.instrs.push(format!("{} {}, {}, {}", mnemonic, left, left, right));
+          this.regs.free_reg(right);
+          Some(left)
+        }
+
         match op {
           Add => {
-            self.instrs.push(format!("add {}, {}, {}", left, left, right));
-            self.regs.free_reg(right);
-            Some(left)
+            simple(self, "add", left, right)
           },
           Sub => {
-            self.instrs.push(format!("sub {}, {}, {}", left, left, right));
-            self.regs.free_reg(right);
-            Some(left)
+            simple(self, "sub", left, right)
           },
           Mul => {
-            self.instrs.push(format!("mul {}, {}, {}", left, left, right));
-            self.regs.free_reg(right);
-            Some(left)
+            simple(self, "mul", left, right)
           },
           Div => {
-            self.instrs.push(format!("div {}, {}, {}", left, left, right));
+            simple(self, "div", left, right)
+          },
+          Srl => {
+            // todo: implement immediate versions
+            simple(self, "srl", left, right)
+          },
+          Sra => {
+            // todo: implement immediate versions
+            simple(self, "sra", left, right)
+          },
+          Sll => {
+            // todo: implement immediate versions
+            simple(self, "sll", left, right)
+          },
+          And => {
+            // todo: implement immediate versions
+            simple(self, "and", left, right)
+          },
+          Or => {
+            // todo: implement immediate versions
+            simple(self, "or", left, right)
+          },
+          Xor => {
+            // todo: implement immediate versions
+            simple(self, "xor", left, right)
+          },
+          Less => {
+            // todo: implement immediate versions
+            simple(self, "slt", left, right)
+          },
+          LessUnsigned => {
+            // todo: implement immediate versions
+            simple(self, "sltu", left, right)
+          },
+          Greater => {
+            // todo: implement immediate versions
+            simple(self, "sltu", right, left)
+          },
+          TestEq => {
+            self.instrs.push(format!("xor {}, {}, {}", left, left, right));
+            self.instrs.push(format!("seqz {}, {}", left, left));
             self.regs.free_reg(right);
             Some(left)
           },

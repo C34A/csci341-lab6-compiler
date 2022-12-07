@@ -30,6 +30,16 @@ pub enum BinOp {
   Sub,
   Mul,
   Div,
+  Srl,
+  Sra,
+  Sll,
+  And,
+  Or,
+  Xor,
+  Less,
+  LessUnsigned,
+  Greater,
+  TestEq,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
