@@ -1,0 +1,19 @@
+if 1 {
+  print_str("true!\n");
+} else {
+  print_str("uh oh\n");
+}
+print_str("between\n");
+if 0 {
+  print_str("uh oh 2\n");
+} else {
+  print_str("false!\n");
+}
+print_str("between2\n");
+if 1 {
+  print_str("true!\n");
+}
+print_str("between3\n");
+if 0 {
+  print_str("uh oh 3\n");
+}

@@ -1,0 +1,11 @@
+let num;
+set num = read_int();
+if ~(num & 1) & 1 {
+  print_str("even!\n");
+} else {
+  if ~(num / 3) {
+    print_str("divisible by 3!\n");
+  } else {
+    print_str("not divisible by 3!\n");
+  }
+}

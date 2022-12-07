@@ -1,4 +1,4 @@
-- logical operators
+- ~~logical operators~~ DONE
 - control flow
 - save registers when calling functions
 - implement more syscall functions
@@ -6,7 +6,7 @@
     - this would be easier to do with a full function implementation...
 - clean up
 - clean up
-- clean up
+- examples?
 - write README/docs
 - turn in prolly
 - optimization?

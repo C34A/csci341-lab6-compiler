@@ -1,6 +1,6 @@
 use std::{collections::HashMap};
 
-use crate::expr::{Expr, Stmt, UnaryOp};
+use crate::expr::{Expr, Stmt, UnaryOp, Block};
 
 
 
@@ -163,11 +163,28 @@ impl SymTab {
   }
 }
 
+
+struct LabelCounter {
+  count: u32
+}
+
+impl LabelCounter {
+  fn next(&mut self) -> String {
+    let ret = format!("__L_{}", self.count);
+    self.count += 1;
+    ret
+  }
+
+  fn new() -> Self { Self { count: 0 } }
+}
 pub struct Compiler {
   stab: SymTab,
-  pub instrs: Vec<String>,
+  pub instrs: IBlock,
   regs: RegMap,
+  label_counter: LabelCounter,
 }
+
+type IBlock = Vec<String>;
 
 impl Compiler {
 
@@ -186,18 +203,25 @@ impl Compiler {
     Self {
       stab: SymTab::new(),
       instrs: vec![],
-      regs: RegMap{map: [RState::Free; 32]}
+      regs: RegMap{map: [RState::Free; 32]},
+      label_counter: LabelCounter::new(),
     }
   }
 
   pub fn compile(&mut self, stmts: Vec<Stmt>) {
-    stmts.iter().for_each(|stmt| self.compile_stmt(stmt));
+    let mut b = vec![];
+    self.compile_block(&mut b, &stmts);
+    self.instrs = b;
   }
 
-  pub fn compile_stmt(&mut self, s: &Stmt) {
+  fn compile_block(&mut self, b: &mut IBlock, stmts: &Block) {
+    stmts.iter().for_each(|stmt| self.compile_stmt(b, stmt));
+  }
+
+  fn compile_stmt(&mut self, b: &mut IBlock, s: &Stmt) {
     match s {
         Stmt::ExprStmt(e) => {
-          if let Some(result_reg) = self.compile_expr(e) {
+          if let Some(result_reg) = self.compile_expr(b, e) {
             // result is discarded in an expression statement
             self.regs.free_reg(result_reg);
           } else {
@@ -215,7 +239,7 @@ impl Compiler {
           self.stab.decl(name.clone() /* PERF: avoid clone */, val);
         },
         Stmt::Assignment(name, value) => {
-          let result = if let Some(result_reg) = self.compile_expr(value) {
+          let result = if let Some(result_reg) = self.compile_expr(b, value) {
             result_reg
           } else {
             return;
@@ -236,89 +260,132 @@ impl Compiler {
             }
           };
 
-          self.instrs.push(format!("sw {}, {}, {}", result, var_label, addr_reg));
+          b.push(format!("sw {}, {}, {}", result, var_label, addr_reg));
           self.regs.free_reg(result);
           self.regs.free_reg(addr_reg);
         },
+        Stmt::If(cond, true_block, false_block) => {
+          let cond_result = self.compile_expr(b, cond);
+          
+          // use these later
+          let false_label = self.label_counter.next();
+          // if the condition failed to compile, always assume false so that the rest of the
+          // if can still be compiled.
+          b.push(format!("beqz {}, {}", cond_result.unwrap_or(ZERO), false_label));
+          
+          cond_result.map(|r| self.regs.free_reg(r)); // the condition isnt used in the body, so free it now.
+          
+          let mut true_iblock = vec![];
+          self.compile_block(&mut true_iblock, true_block);
+          
+          // if there is an else block, compile it. We also need to build a jump into the true block in this case.
+          let false_iblock = if false_block.is_some() {
+            let mut false_iblock = vec![];
+            self.compile_block(&mut false_iblock, false_block.as_ref().unwrap());
+
+            Some(false_iblock)
+          } else {
+            None as _
+          };
+
+          // join true after jump
+          b.append(&mut true_iblock);
+
+          if let Some(mut false_iblock) = false_iblock {
+            // if there is an else block, we need to:
+            // - add another jump over the else block
+            // - emit the "false" label
+            // - append in the else code
+            // - add the end label used by the "true" block
+            let end_label = self.label_counter.next();
+            b.push(format!("j {}", end_label));
+            b.push(format!("{}:", false_label));
+            b.append(&mut false_iblock);
+            b.push(format!("{}:", end_label));
+          } else {
+            // if there is no else block, all that needs to be done is to complete the jump by emitting a label.
+            b.push(format!("{}:", false_label));
+          }
+        }
     }
   }
 
-  pub fn compile_expr(&mut self, e: &Expr) -> Option<Reg> {
+  pub fn compile_expr(&mut self, b: &mut IBlock, e: &Expr) -> Option<Reg> {
     match e {
       Expr::Lit(val) => {
         let reg = self.regs.get_reg().expect("failed to allocate reg for immediate");
         if *val > u32::MAX as _ || *val < i32::MIN as _ {
           eprintln!("WARN: immediate {} is out of 32 bit range", val);
         }
-        self.instrs.push(format!("li {}, {}", reg, val));
+        b.push(format!("li {}, {}", reg, val));
         Some(reg)
       },
       Expr::Bin(left, op, right) =>{
         use crate::expr::BinOp::*;
 
-        let right = self.compile_expr(&right); // compiling right first helps with register management
-        let left = self.compile_expr(&left);
+        let right = self.compile_expr(b, &right); // compiling right first helps with register management
+        let left = self.compile_expr(b, &left);
         let left = left?;
         let right = right?;
 
-        fn simple(this: &mut Compiler, mnemonic: &'static str, left: Reg, right: Reg) -> Option<Reg> {
-          this.instrs.push(format!("{} {}, {}, {}", mnemonic, left, left, right));
+        fn simple(this: &mut Compiler, b: &mut IBlock, mnemonic: &'static str, left: Reg, right: Reg) -> Option<Reg> {
+          b.push(format!("{} {}, {}, {}", mnemonic, left, left, right));
           this.regs.free_reg(right);
           Some(left)
         }
 
         match op {
           Add => {
-            simple(self, "add", left, right)
+            simple(self, b, "add", left, right)
           },
           Sub => {
-            simple(self, "sub", left, right)
+            simple(self, b, "sub", left, right)
           },
           Mul => {
-            simple(self, "mul", left, right)
+            simple(self, b, "mul", left, right)
           },
           Div => {
-            simple(self, "div", left, right)
+            simple(self, b, "div", left, right)
           },
           Srl => {
             // todo: implement immediate versions
-            simple(self, "srl", left, right)
+            simple(self, b, "srl", left, right)
           },
           Sra => {
             // todo: implement immediate versions
-            simple(self, "sra", left, right)
+            simple(self, b, "sra", left, right)
           },
           Sll => {
             // todo: implement immediate versions
-            simple(self, "sll", left, right)
+            simple(self, b, "sll", left, right)
           },
           And => {
             // todo: implement immediate versions
-            simple(self, "and", left, right)
+            simple(self, b, "and", left, right)
           },
           Or => {
             // todo: implement immediate versions
-            simple(self, "or", left, right)
+            simple(self, b, "or", left, right)
           },
           Xor => {
             // todo: implement immediate versions
-            simple(self, "xor", left, right)
+            simple(self, b, "xor", left, right)
           },
           Less => {
             // todo: implement immediate versions
-            simple(self, "slt", left, right)
+            simple(self, b, "slt", left, right)
           },
           LessUnsigned => {
             // todo: implement immediate versions
-            simple(self, "sltu", left, right)
+            simple(self, b, "sltu", left, right)
           },
           Greater => {
             // todo: implement immediate versions
-            simple(self, "sltu", right, left)
+            simple(self, b, "sltu", right, left)
           },
           TestEq => {
-            self.instrs.push(format!("xor {}, {}, {}", left, left, right));
-            self.instrs.push(format!("seqz {}, {}", left, left));
+            b.push(format!("xor {}, {}, {}", left, left, right));
+            b.push(format!("seqz {}, {}", left, left));
             self.regs.free_reg(right);
             Some(left)
           },
@@ -339,14 +406,14 @@ impl Compiler {
             return None;
           }
         };
-        self.instrs.push(format!("lw {}, {}", r, label));
+        b.push(format!("lw {}, {}", r, label));
         Some(r)
       },
       Expr::Call(name, params) => {
         let mut all_ok = true;
         for (i, param_expr) in params.iter().enumerate() {
-          if let Some(r) = self.compile_expr(param_expr) {
-            self.instrs.push(format!("mv a{}, {}", i, r));
+          if let Some(r) = self.compile_expr(b, param_expr) {
+            b.push(format!("mv a{}, {}", i, r));
             self.regs.free_reg(r);
           } else {
             all_ok = false;
@@ -354,7 +421,7 @@ impl Compiler {
         }
 
         if all_ok { // if the args are invalid, dont compile the call i guess.
-          self.instrs.push(format!("call {}", name));
+          b.push(format!("call {}", name));
         } else {
           eprintln!("ERR: failed to compile call to {}", name);
         }
@@ -364,14 +431,14 @@ impl Compiler {
       Expr::String(s) => {
         let lbl = self.stab.add_string(s.clone());
         let reg = self.regs.get_reg().expect("failed to get register for string");
-        self.instrs.push(format!("la {}, {}", reg, lbl));
+        b.push(format!("la {}, {}", reg, lbl));
         Some(reg)
       },
       Expr::Unary(operator, operand) => {
         match operator {
           UnaryOp::Deref => {
-            let operand_result = self.compile_expr(operand)?;
-            self.instrs.push(format!("lw {}, ({})", operand_result, operand_result));
+            let operand_result = self.compile_expr(b, operand)?;
+            b.push(format!("lw {}, ({})", operand_result, operand_result));
             Some(operand_result)
           },
           UnaryOp::Addr => {
@@ -393,7 +460,7 @@ impl Compiler {
                     return None;
                   },
                 };
-                self.instrs.push(format!("la {}, {}", reg, label));
+                b.push(format!("la {}, {}", reg, label));
                 Some(reg)
               },
               _ => {
@@ -403,13 +470,13 @@ impl Compiler {
             }
           },
           UnaryOp::Neg => {
-            let operand_result = self.compile_expr(operand)?;
-            self.instrs.push(format!("sub {}, x0, {}", operand_result, operand_result));
+            let operand_result = self.compile_expr(b, operand)?;
+            b.push(format!("sub {}, x0, {}", operand_result, operand_result));
             Some(operand_result)
           },
           UnaryOp::Not => {
-            let operand_result = self.compile_expr(operand)?;
-            self.instrs.push(format!("xori {}, {}, -1", operand_result, operand_result));
+            let operand_result = self.compile_expr(b, operand)?;
+            b.push(format!("xori {}, {}, -1", operand_result, operand_result));
             Some(operand_result)
           },
         }

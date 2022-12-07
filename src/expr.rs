@@ -1,10 +1,12 @@
 
+pub type Block = Vec<Stmt>;
 
 #[derive(Debug)]
 pub enum Stmt {
   ExprStmt(Expr),
   Decl(String, DeclInit),
   Assignment(String, Expr),
+  If(Expr, Block, Option<Block>),
 }
 
 

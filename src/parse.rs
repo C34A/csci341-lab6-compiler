@@ -58,6 +58,15 @@ pub enum Tok<'a> {
   #[token(")")]
   RParen,
 
+  #[token("{")]
+  LBracket,
+  #[token("}")]
+  RBracket,
+  #[token("if")]
+  If,
+  #[token("else")]
+  Else,
+
   #[token(",")]
   Comma,
 
@@ -94,13 +103,17 @@ impl<'a> Lex<'a> {
   }
 
   fn pop(&mut self) -> Option<Tok<'a>> {
-    match self.tokens.pop() {
-      Some(Tok::Error) => {
-        eprintln!("ERR: unrecognized token");
-        self.pop()
-      },
-      other => other,
-    }
+    let ret = 
+        match self.tokens.pop() {
+        Some(Tok::Error) => {
+          eprintln!("ERR: unrecognized token");
+          self.pop()
+        },
+        other => other,
+      }
+    ;
+    println!("{:?}", ret);
+    ret
   }
 
   fn peek(&mut self) -> Option<&Tok<'a>> {
@@ -113,25 +126,38 @@ impl<'a> Lex<'a> {
       other => other,
     }
   }
+
+  fn push(&mut self, t: Tok<'a>) {
+    println!(">{:?}", t);
+    self.tokens.push(t)
+  }
 }
 
-pub fn parse(input: &str) -> Option<Vec<Stmt>> {
+pub fn parse(input: &str) -> Option<Block> {
   let mut lex = Lex::new(input);
 
+  // useful for lexer debugging:
   // for t in lex.tokens.iter().rev() {
   //   println!("{:?}", t);
   // }
 
+  parse_block(&mut lex)
+}
+
+fn parse_block<'a>(lex: &mut Lex) -> Option<Block> {
   let mut ret = vec![];
 
-  loop {
-    if let Some(s) = parse_decl(&mut lex) {
+  loop { // todo: something more fault tolerant?
+    if let Some(s) = parse_decl(lex) {
       ret.push(s);
       continue;
-    } else if let Some(s) = parse_assign(&mut lex) {
+    } else if let Some(s) = parse_assign(lex) {
       ret.push(s);
       continue;
-    } else if let Some(s) = parse_expr_stmt(&mut lex) {
+    } else if let Some(s) = parse_expr_stmt(lex) {
+      ret.push(s);
+      continue;
+    } else if let Some(s) = parse_if_stmt(lex) {
       ret.push(s);
       continue;
     } else {
@@ -141,6 +167,36 @@ pub fn parse(input: &str) -> Option<Vec<Stmt>> {
 
   if ret.len() >= 1 {
     Some(ret)
+  } else {
+    None
+  }
+}
+
+fn parse_if_stmt<'a>(lex: &mut Lex) -> Option<Stmt> {
+  match lex.peek() {
+    Some(Tok::If) => {lex.pop(); ()},
+    t => {
+      return None
+    },
+  }
+  let mut ok = true;
+  let condition = parse_expr(lex);
+
+  expect(lex, Tok::LBracket, "ERR: expected { after if")?;
+
+  let true_block = parse_block(lex);
+  ok = if let Some(_) = expect(lex, Tok::RBracket, "ERR: expected } after if 'true' block")
+    { ok } else { false };
+
+  let else_block = if let Some(_) = match_tok(lex, Tok::Else) {
+    expect(lex, Tok::LBracket, "ERR: expected { after else")?;
+    let b = parse_block(lex);
+    expect(lex, Tok::RBracket, "ERR: expected } after else block")
+      .map(|_| b.unwrap())
+  } else { None };
+
+  if ok {
+    Some(Stmt::If(condition?, true_block?, else_block))
   } else {
     None
   }
@@ -187,24 +243,52 @@ fn match_tok<'a>(lex: &mut Lex<'a>, expected: Tok) -> Option<Tok<'a>> {
   if let Some(t) = lex.peek() {
     match (t, expected) {
       // this is stupid but fine for now (ie works)
-      (Tok::Equals, Tok::Equals) => Some(lex.pop()?),
-      (Tok::Ident(_), Tok::Ident(_)) => Some(lex.pop()?),
-      (Tok::Let, Tok::Let) => Some(lex.pop()?),
-      (Tok::Set, Tok::Set) => Some(lex.pop()?),
       (Tok::Lit(_), Tok::Lit(_)) => Some(lex.pop()?),
-      (Tok::Minus, Tok::Minus) => Some(lex.pop()?),
+      (Tok::Ident(_), Tok::Ident(_)) => Some(lex.pop()?),
       (Tok::Plus, Tok::Plus) => Some(lex.pop()?),
-      (Tok::Semicolon, Tok::Semicolon) => Some(lex.pop()?),
-      (Tok::Slash, Tok::Slash) => Some(lex.pop()?),
+      (Tok::Minus, Tok::Minus) => Some(lex.pop()?),
       (Tok::Star, Tok::Star) => Some(lex.pop()?),
+      (Tok::Slash, Tok::Slash) => Some(lex.pop()?),
+      (Tok::Amp, Tok::Amp) => Some(lex.pop()?),
+      (Tok::Tilde, Tok::Tilde) => Some(lex.pop()?),
+      (Tok::Equals, Tok::Equals) => Some(lex.pop()?),
+      (Tok::Semicolon, Tok::Semicolon) => Some(lex.pop()?),
+      (Tok::EqEq, Tok::EqEq) => Some(lex.pop()?),
+      (Tok::Less, Tok::Less) => Some(lex.pop()?),
+      (Tok::LessUnsigned, Tok::LessUnsigned) => Some(lex.pop()?),
+      (Tok::Greater, Tok::Greater) => Some(lex.pop()?),
+      (Tok::Or, Tok::Or) => Some(lex.pop()?),
+      (Tok::Xor, Tok::Xor) => Some(lex.pop()?),
+      (Tok::RShift, Tok::RShift) => Some(lex.pop()?),
+      (Tok::ARShift, Tok::ARShift) => Some(lex.pop()?),
+      (Tok::LShift, Tok::LShift) => Some(lex.pop()?),
+      (Tok::Let, Tok::Let) => Some(lex.pop()?),
       (Tok::LParen, Tok::LParen) => Some(lex.pop()?),
       (Tok::RParen, Tok::RParen) => Some(lex.pop()?),
+      (Tok::LBracket, Tok::LBracket) => Some(lex.pop()?),
+      (Tok::RBracket, Tok::RBracket) => Some(lex.pop()?),
+      (Tok::If, Tok::If) => Some(lex.pop()?),
+      (Tok::Else, Tok::Else) => Some(lex.pop()?),
       (Tok::Comma, Tok::Comma) => Some(lex.pop()?),
-      (Tok::Amp, Tok::Amp) => Some(lex.pop()?),
-      _ => None,
+      (Tok::String(_), Tok::String(_)) => Some(lex.pop()?),
+      (Tok::Set, Tok::Set) => Some(lex.pop()?),
+      (t, e) => {
+        // println!("expected {:?} got {:?}", e, t);
+        None
+      },
     }
   } else {
     None
+  }
+}
+
+fn expect<'a>(lex: &mut Lex<'a>, expected: Tok, message: &'static str) -> Option<Tok<'a>> {
+  match match_tok(lex, expected) {
+    Some(t) => Some(t),
+    None => {
+      eprintln!("{}", message);
+      None
+    }
   }
 }
 
@@ -285,7 +369,8 @@ fn parse_atom<'a>(lex: &mut Lex) -> Option<Expr> {
         }
       }
     }
-    _ => {
+    other => {
+      other.map(|tok| lex.push(tok)); // un-eat token if it isnt valid
       None
     },
   }
@@ -336,7 +421,9 @@ fn parse_unary<'a>(lex: &mut Lex) -> Option<Expr> {
     Some(Tok::Star) => UnaryOp::Deref,
     Some(Tok::Minus) => UnaryOp::Neg,
     Some(Tok::Tilde) => UnaryOp::Not,
-    _ => return parse_call(lex)
+    _ => {
+      return parse_call(lex)
+    }
   };
   lex.pop(); // eat operator
 
