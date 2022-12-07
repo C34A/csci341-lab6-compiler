@@ -5,9 +5,9 @@
 - ~~implement more syscall functions~~ DONE
   - only use whats needed from stdlib?
     - this would be easier to do with a full function implementation...
+- ~~clean up~~
 - clean up
-- clean up
-- examples?
-- write README/docs
-- turn in prolly
-- optimization?
+- ~~examples?~~ tests good enough (no time)
+- ~~write README/docs~~
+- turn in?
+- optimization????

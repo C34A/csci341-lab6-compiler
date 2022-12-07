@@ -2,7 +2,7 @@ fn main() {
   let args: Vec<String> = std::env::args().collect();
   let mut args = args.iter();
   args.next();
-  let path = args.next().map_or_else(|| "tests/if_simple.oh", |s| &s);
+  let path = args.next().expect("expected file path to compile");
 
   let text = std::fs::read_to_string(path).expect(&format!("file {} not found.", path));
 
@@ -10,7 +10,7 @@ fn main() {
 
   // for debugging the parser:
   // println!("{:#?}", ast);
-  
+
   let mut builder = compiler::riscv::Compiler::new();
   builder.compile(ast);
   builder.dump();

@@ -118,7 +118,6 @@ impl<'a> Lex<'a> {
         other => other,
       }
     ;
-    // println!("{:?}", ret);
     ret
   }
 
@@ -126,15 +125,12 @@ impl<'a> Lex<'a> {
     match self.tokens.last() {
       Some(Tok::Error) => {
         panic!("ERR: unrecognized token: {:?}", self.tokens.last().unwrap());
-        // self.tokens.pop();
-        // self.peek()
       },
       other => other,
     }
   }
 
   fn push(&mut self, t: Tok<'a>) {
-    // println!(">{:?}", t);
     self.tokens.push(t)
   }
 }
