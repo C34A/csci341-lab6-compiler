@@ -32,6 +32,7 @@ pub enum BinOp {
   Sub,
   Mul,
   Div,
+  Rem,
   Srl,
   Sra,
   Sll,
@@ -50,4 +51,5 @@ pub enum UnaryOp {
   Addr,
   Neg,
   Not,
+  BoolNot,
 }

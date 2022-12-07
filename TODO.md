@@ -1,5 +1,6 @@
 - ~~logical operators~~ DONE
-- control flow
+- ~~control flow~~ DONE
+- ~~boolean not and remainder~~ DONE
 - save registers when calling functions
 - implement more syscall functions
   - only use whats needed from stdlib?

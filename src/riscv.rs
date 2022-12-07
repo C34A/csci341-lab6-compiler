@@ -347,6 +347,9 @@ impl Compiler {
           Div => {
             simple(self, b, "div", left, right)
           },
+          Rem => {
+            simple(self, b, "rem", left, right)
+          }
           Srl => {
             // todo: implement immediate versions
             simple(self, b, "srl", left, right)
@@ -439,6 +442,11 @@ impl Compiler {
           UnaryOp::Deref => {
             let operand_result = self.compile_expr(b, operand)?;
             b.push(format!("lw {}, ({})", operand_result, operand_result));
+            Some(operand_result)
+          },
+          UnaryOp::BoolNot => {
+            let operand_result = self.compile_expr(b, operand)?;
+            b.push(format!("seqz {}, {}", operand_result, operand_result));
             Some(operand_result)
           },
           UnaryOp::Addr => {

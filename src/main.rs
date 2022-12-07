@@ -8,8 +8,9 @@ fn main() {
 
   let ast = compiler::parse::parse(&text).expect("parse failed");
 
-
-  println!("{:#?}", ast);
+  // for debugging the parser:
+  // println!("{:#?}", ast);
+  
   let mut builder = compiler::riscv::Compiler::new();
   builder.compile(ast);
   builder.dump();

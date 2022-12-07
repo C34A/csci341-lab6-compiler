@@ -19,6 +19,10 @@ pub enum Tok<'a> {
   Star,
   #[token("/")]
   Slash,
+  #[token("%")]
+  Rem,
+  #[token("!")]
+  Bang,
   #[token("&")]
   Amp,
   #[token("~")]
@@ -175,7 +179,7 @@ fn parse_block<'a>(lex: &mut Lex) -> Option<Block> {
 fn parse_if_stmt<'a>(lex: &mut Lex) -> Option<Stmt> {
   match lex.peek() {
     Some(Tok::If) => {lex.pop(); ()},
-    t => {
+    _ => {
       return None
     },
   }
@@ -249,6 +253,8 @@ fn match_tok<'a>(lex: &mut Lex<'a>, expected: Tok) -> Option<Tok<'a>> {
       (Tok::Minus, Tok::Minus) => Some(lex.pop()?),
       (Tok::Star, Tok::Star) => Some(lex.pop()?),
       (Tok::Slash, Tok::Slash) => Some(lex.pop()?),
+      (Tok::Rem, Tok::Rem) => Some(lex.pop()?),
+      (Tok::Bang, Tok::Bang) => Some(lex.pop()?),
       (Tok::Amp, Tok::Amp) => Some(lex.pop()?),
       (Tok::Tilde, Tok::Tilde) => Some(lex.pop()?),
       (Tok::Equals, Tok::Equals) => Some(lex.pop()?),
@@ -272,7 +278,7 @@ fn match_tok<'a>(lex: &mut Lex<'a>, expected: Tok) -> Option<Tok<'a>> {
       (Tok::Comma, Tok::Comma) => Some(lex.pop()?),
       (Tok::String(_), Tok::String(_)) => Some(lex.pop()?),
       (Tok::Set, Tok::Set) => Some(lex.pop()?),
-      (t, e) => {
+      (_, _) => {
         // println!("expected {:?} got {:?}", e, t);
         None
       },
@@ -421,6 +427,7 @@ fn parse_unary<'a>(lex: &mut Lex) -> Option<Expr> {
     Some(Tok::Star) => UnaryOp::Deref,
     Some(Tok::Minus) => UnaryOp::Neg,
     Some(Tok::Tilde) => UnaryOp::Not,
+    Some(Tok::Bang) => UnaryOp::BoolNot,
     _ => {
       return parse_call(lex)
     }
@@ -441,6 +448,10 @@ fn parse_term<'a>(lex: &mut Lex) -> Option<Expr>  {
     Some(Tok::Slash) => {
       lex.pop()?; // eat op
       BinOp::Div
+    },
+    Some(Tok::Rem) => {
+      lex.pop()?; // eat op
+      BinOp::Rem
     },
     _ => return Some(first),
   };
