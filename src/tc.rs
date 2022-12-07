@@ -44,7 +44,8 @@ pub fn typecheck(e: &Expr, errs: &mut Vec<String>) -> Option<TExpr> {
         exp: TExprKind::Bin(Box::new(left), *op, Box::new(right))
       })
     }
-    Expr::Call(_, _) => todo!(),
+    Expr::Call(_, _) => unimplemented!(),
+    Expr::String(_) => unimplemented!(),
   }
   
 }

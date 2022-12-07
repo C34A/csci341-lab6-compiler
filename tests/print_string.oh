@@ -1,0 +1,3 @@
+let hello_world = "Hello";
+print_str(hello_world);
+print_str(", World!\n");

@@ -1,0 +1,4 @@
+let a = 42;
+let b = 7;
+set a = a * b + 2;
+set b = b + 1;

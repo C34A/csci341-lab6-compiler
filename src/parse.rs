@@ -1,5 +1,6 @@
+
 use crate::expr::*;
-use logos::Logos;
+use logos::{Logos, Lexer};
 
 
 #[derive(Debug, Logos, PartialEq)]
@@ -35,6 +36,10 @@ pub enum Tok<'a> {
   #[token(",")]
   Comma,
 
+  #[regex(r#""([^"\\]|\\t|\\r|\\n|\\")*""#, lex_str)
+  ]
+  String(&'a str),
+
   // this lets us not need lookahead which and is a bit of a hack but makes life easier
   #[token("set")]
   Set,
@@ -43,6 +48,10 @@ pub enum Tok<'a> {
   #[regex(r"[ \t\n\r\f]+", logos::skip)]
   #[error]
   Error,
+}
+
+fn lex_str<'a>(lex: &mut Lexer<'a, Tok<'a>>) -> Option<&'a str> {
+  Some(&lex.slice()[1..lex.slice().len()-1])
 }
 
 struct Lex<'a> {
@@ -122,15 +131,22 @@ fn parse_decl<'a>(lex: &mut Lex) -> Option<Stmt> {
     return None;
   };
 
+  // parse assignment, or fill in 0 otherwise
   let val = if let Some(_) = match_tok(lex, Tok::Equals) {
-    if let Some(Tok::Lit(val)) = match_tok(lex, Tok::Lit(0)) {
-      val
-    } else {
-      eprintln!("ERR: value expected in declaration (note: expressions are not supported here)");
-      synchronize(lex);
-      return None;
+    match lex.pop() {
+      Some(Tok::Lit(val)) => {
+        DeclInit::Int(val)
+      },
+      Some(Tok::String(s)) => {
+        DeclInit::Str(s.into())
+      },
+      _ => {
+        eprintln!("ERR: value expected in declaration (note: expressions are not supported here)");
+        synchronize(lex);
+        return None;
+      }
     }
-  } else {0};
+  } else { DeclInit::Int(0) };
 
   if let Some(_) = match_tok(lex, Tok::Semicolon) {
     Some(Stmt::Decl(name, val))
@@ -227,6 +243,9 @@ fn parse_atom<'a>(lex: &mut Lex) -> Option<Expr> {
     Some(Tok::Lit(l)) => {
       Some(Expr::Lit(l))
     },
+    Some(Tok::String(s)) => {
+      Some(Expr::String(s.into()))
+    },
     _ => {
       None
     },
@@ -246,7 +265,6 @@ fn parse_call<'a>(lex: &mut Lex) -> Option<Expr> {
           // if matches!(lex.peek(), Some(Tok::RParen)) {
           //   break;
           // }
-          println!("{:?}", lex.peek());
           match lex.peek() {
             Some(Tok::RParen) => break,
             Some(Tok::Comma) => (),

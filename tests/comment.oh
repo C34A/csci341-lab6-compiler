@@ -1,0 +1,5 @@
+let a = 42; // declare a
+let b = 7;  // declare b
+set a = a * b + 2; // compute new a
+// increment b
+set b = b + 1;

@@ -119,11 +119,12 @@ impl RegMap {
 }
 
 struct SymTab {
-  pub data: HashMap<String, (String, i64)>,
+  pub data: HashMap<String, (String, String)>, // (label, initial value)
+  pub strings: Vec<(String, String)>, // (label, contents)
 }
 
 impl SymTab {
-  fn decl(&mut self, name: String, initial: i64) -> Option<()> {
+  fn decl(&mut self, name: String, initial: String) -> Option<()> {
     if self.data.contains_key(&name) {
       eprintln!("ERR: Redeclaration of variable {}", name);
       return None;
@@ -137,8 +138,16 @@ impl SymTab {
     self.data.get(name).map(|tup| &tup.0 as _)
   }
 
+  fn add_string(&mut self, s: String) -> String {
+    self.strings.push((format!("__str_{}", self.strings.len()), s));
+    self.strings.last().unwrap().0.clone() /* PERF: avoid clone */
+  }
+
   fn dump_data_asm(&self) {
     println!(".data");
+    for (label, initial) in &self.strings {
+      println!(r#"{}: .asciz "{}" "#, label, initial);
+    }
     for (label, initial) in self.data.values() {
       println!("{}:", label);
       println!("    .word {}", initial);
@@ -170,7 +179,11 @@ impl Compiler {
   }
 
   pub fn new() -> Self {
-    Self { stab: SymTab {data: HashMap::new()}, instrs: vec![], regs: RegMap{map: [RState::Free; 32]} }
+    Self {
+      stab: SymTab {data: HashMap::new(), strings: vec![]},
+      instrs: vec![],
+      regs: RegMap{map: [RState::Free; 32]}
+    }
   }
 
   pub fn compile(&mut self, stmts: Vec<Stmt>) {
@@ -189,16 +202,21 @@ impl Compiler {
           }
         },
         Stmt::Decl(name, init_val) => {
-          self.stab.decl(name.clone() /* PERF: avoid clone */, *init_val);
+          let val = match init_val {
+            crate::expr::DeclInit::Str(contents) => {
+              self.stab.add_string(contents.clone())
+            },
+            crate::expr::DeclInit::Int(val) => format!("{}", val),
+          };
+          self.stab.decl(name.clone() /* PERF: avoid clone */, val);
         },
         Stmt::Assignment(name, value) => {
-          
           let result = if let Some(result_reg) = self.compile_expr(value) {
             result_reg
           } else {
             return;
           };
-          let var_label = match self.stab.get_var(name) {
+          let var_label = match self.stab.get_var(&name) {
             Some(l) => l.to_string(), // helps with ownership trouble
             None => {
               eprintln!("variable not found: {}", name);
@@ -297,6 +315,12 @@ impl Compiler {
         }
 
         Some(A0)
+      },
+      Expr::String(s) => {
+        let lbl = self.stab.add_string(s.clone());
+        let reg = self.regs.get_reg().expect("failed to get register for string");
+        self.instrs.push(format!("la {}, {}", reg, lbl));
+        Some(reg)
       },
     }
   }

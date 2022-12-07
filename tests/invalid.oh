@@ -1,0 +1,6 @@
+let a 42;
+let b = ;
+set a * b + 2;
+set b = b + 1
+let c = 3;
+set c = b + a;
