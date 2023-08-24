@@ -1,6 +1,5 @@
 # Lab 6: Compiler
 ```
-Theo Marshall
 CSCI 341 C
 2022-12-07
 ```
